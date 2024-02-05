@@ -1,0 +1,9 @@
+{:deps
+ {org.apache.kafka/kafka-clients {:mvn/version "3.6.1"}
+  org.apache.kafka/kafka-streams {:mvn/version "3.6.1"}
+  org.clojure/clojure {:mvn/version "1.11.1"}
+  org.clojure/tools.logging {:mvn/version "1.2.4"}
+  org.slf4j/slf4j-simple {:mvn/version "1.7.36"}}
+
+ :paths
+ ["src" "dev"]}
