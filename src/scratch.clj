@@ -34,7 +34,7 @@
           (ks/make-kstream "consultas" (kc/string-serde) (kc/string-serde))
           (ks/peek #(println "consulta:" %1 %2))
           (ks/group-by-key)
-          ;; (ks/windowed-by 30 5)
+          (ks/windowed-by 30 5)
           (ks/count (kc/string-serde) (kc/long-serde))))
 
     (def paymentCount
@@ -42,7 +42,7 @@
           (ks/make-kstream "pagamentos" (kc/string-serde) (kc/string-serde))
           (ks/peek #(println "pagamento:" %1 %2))
           (ks/group-by-key)
-          ;; (ks/windowed-by 30 5)
+          (ks/windowed-by 30 5)
           (ks/count (kc/string-serde) (kc/long-serde))))
 
     (-> (ks/join queryCount
@@ -51,14 +51,13 @@
         (ks/ktable->kstream)
         (ks/peek #(println "saida:" %1 %2))
         ;;(ks/filter (fn [k v] (> v 1.2)))
-        (ks/to "cxp" (kc/string-serde) (kc/double-serde)))
+        (ks/to "cxp" (ks/windowed-string-serde) (kc/double-serde)))
 
     (ks/make-kafka-streams builder ks-config)))
 
 (comment
   (pprint (force (kc/send! producer "consultas"  "user-1" "-")))
   (pprint (force (kc/send! producer "pagamentos" "user-1" "100.00")))
-
 
   (pprint (kc/poll consumer 1))
 

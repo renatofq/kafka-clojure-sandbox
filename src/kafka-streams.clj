@@ -4,8 +4,8 @@
            [org.apache.kafka.streams
             KafkaStreams StreamsBuilder Topology]
            [org.apache.kafka.streams.kstream
-            KStream KTable Consumed Produced Materialized
-            Predicate ValueJoiner ForeachAction SlidingWindows]))
+            KStream KTable Consumed Produced Materialized Predicate ValueJoiner
+            ForeachAction SlidingWindows TimeWindows WindowedSerdes]))
 
 (defn- config->props
   [config]
@@ -51,7 +51,7 @@
   [kwindowable time-seconds grace-seconds]
   (.windowedBy
    kwindowable
-   (SlidingWindows/withTimeDifferenceAndGrace
+   (TimeWindows/ofSizeAndGrace
     (Duration/ofSeconds time-seconds)
     (Duration/ofSeconds grace-seconds))))
 
@@ -72,8 +72,6 @@
   [ktable]
   (.toStream ktable))
 
-(comment
-  (reify
-    ValueJoiner
-    (apply [this a b] (println a b)))
-  )
+(defn windowed-string-serde
+  []
+  (WindowedSerdes/timeWindowedSerdeFrom java.lang.String))
