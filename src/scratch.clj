@@ -1,9 +1,11 @@
-(ns user
-  (:require [kafka.client :as kc]
-            [kafka.streams :as ks]
-            [clojure.pprint :refer [pprint]]
-            [clojure.datafy :refer [datafy]])
-  (:import org.apache.kafka.common.serialization.Serdes))
+(ns scratch
+  (:require
+   [clojure.pprint :refer [pprint]]
+   [clojure.string :as str]
+   [kafka-client :as kc]
+   [kafka-streams :as ks])
+  (:import
+   (org.apache.kafka.common.serialization Serdes)))
 
 (def kc-config
   {"bootstrap.servers" "localhost:9092"
@@ -16,89 +18,65 @@
    "value.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"})
 
 (def producer (kc/producer kc-config))
-(pprint producer)
+(force (kc/send! producer "consultas"  "user-1" "-"))
+(force (kc/send! producer "pagamentos" "user-1" "100.00"))
 
-(def consumer (kc/consumer kc-config))
-(kc/subscribe consumer ["saida"])
+(def ks-config
+  {"application.id" "scratch"
+   "bootstrap.servers" "localhost:9092"
+   "cache.max.bytes.buffering" "0"
+   "default.key.serde" (.getClass (Serdes/String))
+   "default.value.serde" (.getClass (Serdes/String))
+   "default.windowed.key.serde.inner" (.getClass (Serdes/String))
+   "default.windowed.value.serde.inner" (.getClass (Serdes/String))})
 
+
+(defn- make-ticks-stream
+  [builder topic]
+  (-> builder
+      (ks/make-kstream topic (kc/string-serde) (kc/string-serde))
+      (ks/peek #(println topic ":>" %1 %2))
+      (ks/map-values (fn [v] (get topic 0)))))
 
 (def kstreams
-  (do
-    (def ks-config
-      {"application.id" "scratch"
-       "bootstrap.servers" "localhost:9092"
-       "cache.max.bytes.buffering" "0"
-       "default.key.serde" (.getClass (Serdes/String))
-       "default.value.serde" (.getClass (Serdes/String))
-       "default.windowed.key.serde.inner" (.getClass (Serdes/String))
-       "default.windowed.value.serde.inner" (.getClass (Serdes/String))})
-
-    (def builder (ks/make-streams-builder))
-    (def consulta-ticks
-      (-> builder
-          (ks/make-kstream "consultas" (kc/string-serde) (kc/string-serde))
-          (ks/peek #(println "consulta:" %1 %2))
-          (ks/map-values (fn [v] "c"))))
-
-    (def pagamento-ticks
-      (-> builder
-          (ks/make-kstream "pagamentos" (kc/string-serde) (kc/string-serde))
-          (ks/peek #(println "pagamento:" %1 %2))
-          (ks/map-values (fn [v] "p"))))
-
+  (let [builder (ks/make-streams-builder)
+        consulta-ticks (make-ticks-stream builder "consultas")
+        pagamento-ticks (make-ticks-stream builder "pagamentos")]
+ 
     (-> (ks/merge consulta-ticks pagamento-ticks)
         (ks/group-by-key)
         (ks/windowed-by 30 5)
         (ks/aggregate
-         #("1,1")
-         (fn [k v a] (a))
-         ;; (fn [k v acc]
-         ;;   (let [splited (clojure.string/split acc #"," 2)
-         ;;         [c-count p-count] (mapv #(Integer/valueOf %) splited)]
-         ;;     (clojure.string/join ","
-         ;;                          (if (= v "c")
-         ;;                            [(inc c-count) p-count]
-         ;;                            [c-count (inc p-count)]))))
+         (fn [] "1,1")
+         (fn [k v acc]
+           (let [[c-count p-count] (str/split acc #"," 2)]
+             (if (= v \c)
+               (str (inc (Long/valueOf c-count)) \, p-count)
+               (str c-count \, (inc (Long/valueOf p-count))))))
          (kc/string-serde)
          (kc/string-serde))
-        ;; (ks/count (kc/string-serde) (kc/long-serde))
         (ks/ktable->kstream (fn [k v] (.key k)))
-        ;;(ks/peek #(println "merged-count:" %1 %2))
-        ;;(ks/map-values (fn [v] (double (apply / clojure.string/split))))
+        (ks/peek #(println "merged-count:" %1 %2))
+        (ks/map-values
+         (fn [v]
+           (let [[c-count p-count] (str/split v #",")]
+             (double (/ (Long/valueOf c-count) (Long/valueOf p-count))))))
         (ks/peek #(println "saida:" %1 %2))
-        (ks/to "saida" (kc/string-serde) (kc/string-serde)))
+        (ks/to "saida" (kc/string-serde) (kc/double-serde)))
 
     (ks/start-kafka-streams builder ks-config)))
 
 (comment
+  (def consumer (kc/consumer kc-config))
+  (kc/subscribe consumer ["saida"])
+
   (pprint (force (kc/send! producer "consultas"  "user-1" "-")))
   (pprint (force (kc/send! producer "pagamentos" "user-1" "100.00")))
 
   (pprint (kc/poll consumer 1))
 
+  (ks/stop-kafka-streams kstreams)
 
-  (pprint kstreams)
-
-  (.close kstreams)
   (.close consumer)
   (.close producer)
-
-  (reduce
-   (fn [acc v]
-     (let [splited (clojure.string/split acc #"," 2)
-           [c-count p-count] (mapv #(Integer/valueOf %) splited)]
-       (clojure.string/join
-        ","
-        (if (= v "c")
-          [(inc c-count) p-count]
-          [c-count (inc p-count)]))))
-   "0,0"
-   ["c" "c" "c" "v"])
-
-  (reduce #("a") (fn [a b] b) ["b" "c"])
-
-  (let [[c p] (mapv #(Integer/valueOf %) (clojure.string/split "0,0" #"," 2))]
-    (println (clojure.string/join "," [c p])))
-
-  
-  )
+)

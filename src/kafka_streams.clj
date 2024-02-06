@@ -1,4 +1,4 @@
-(ns kafka.streams
+(ns kafka-streams
   (:refer-clojure :exclude [filter count peek merge])
   (:import java.time.Duration
            [org.apache.kafka.streams

@@ -1,4 +1,4 @@
-(ns kafka.client
+(ns kafka-client
   "Clojure wrapper around Kafka Client API"
   (:gen-class)
   (:require [clojure.pprint :refer [pprint]]
@@ -6,8 +6,7 @@
   (:import java.time.Duration
            [org.apache.kafka.clients.producer
             KafkaProducer ProducerRecord]
-           [org.apache.kafka.clients.consumer
-            KafkaConsumer ConsumerRecords ConsumerRecord]
+           org.apache.kafka.clients.consumer.KafkaConsumer
            [org.apache.kafka.common.serialization
             Serde Serdes]))
 

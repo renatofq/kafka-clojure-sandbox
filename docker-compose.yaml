@@ -1,6 +1,6 @@
 services:
   zookeeper:
-    image: "quay.io/strimzi/kafka:latest-kafka-3.6.1"
+    image: "docker.binarios.intranet.bb.com.br/strimzi/kafka:0.39.0-kafka-3.6.1"
     command:
       - "sh"
       - "-c"
@@ -11,7 +11,7 @@ services:
       LOG_DIR: "/tmp/logs"
 
   kafka:
-    image: "quay.io/strimzi/kafka:latest-kafka-3.6.1"
+    image: "docker.binarios.intranet.bb.com.br/strimzi/kafka:0.39.0-kafka-3.6.1"
     command:
       - "sh"
       - "-c"
