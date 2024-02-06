@@ -1,8 +1,9 @@
-(ns dummy
+(ns user
   (:require [kafka.client :as kc]
             [kafka.streams :as ks]
             [clojure.pprint :refer [pprint]]
-            [clojure.datafy :refer [datafy]]))
+            [clojure.datafy :refer [datafy]])
+  (:import org.apache.kafka.common.serialization.Serdes))
 
 (def kc-config
   {"bootstrap.servers" "localhost:9092"
@@ -18,7 +19,7 @@
 (pprint producer)
 
 (def consumer (kc/consumer kc-config))
-(kc/subscribe consumer ["cxp"])
+(kc/subscribe consumer ["saida"])
 
 
 (def kstreams
@@ -26,34 +27,48 @@
     (def ks-config
       {"application.id" "scratch"
        "bootstrap.servers" "localhost:9092"
-       "cache.max.bytes.buffering" "0"})
+       "cache.max.bytes.buffering" "0"
+       "default.key.serde" (.getClass (Serdes/String))
+       "default.value.serde" (.getClass (Serdes/String))
+       "default.windowed.key.serde.inner" (.getClass (Serdes/String))
+       "default.windowed.value.serde.inner" (.getClass (Serdes/String))})
 
     (def builder (ks/make-streams-builder))
-    (def queryCount
+    (def consulta-ticks
       (-> builder
           (ks/make-kstream "consultas" (kc/string-serde) (kc/string-serde))
           (ks/peek #(println "consulta:" %1 %2))
-          (ks/group-by-key)
-          (ks/windowed-by 30 5)
-          (ks/count (kc/string-serde) (kc/long-serde))))
+          (ks/map-values (fn [v] "c"))))
 
-    (def paymentCount
+    (def pagamento-ticks
       (-> builder
           (ks/make-kstream "pagamentos" (kc/string-serde) (kc/string-serde))
           (ks/peek #(println "pagamento:" %1 %2))
-          (ks/group-by-key)
-          (ks/windowed-by 30 5)
-          (ks/count (kc/string-serde) (kc/long-serde))))
+          (ks/map-values (fn [v] "p"))))
 
-    (-> (ks/join queryCount
-                 paymentCount
-                 (fn [queries payments] (double (/ queries payments))))
-        (ks/ktable->kstream)
+    (-> (ks/merge consulta-ticks pagamento-ticks)
+        (ks/group-by-key)
+        (ks/windowed-by 30 5)
+        (ks/aggregate
+         #("1,1")
+         (fn [k v a] (a))
+         ;; (fn [k v acc]
+         ;;   (let [splited (clojure.string/split acc #"," 2)
+         ;;         [c-count p-count] (mapv #(Integer/valueOf %) splited)]
+         ;;     (clojure.string/join ","
+         ;;                          (if (= v "c")
+         ;;                            [(inc c-count) p-count]
+         ;;                            [c-count (inc p-count)]))))
+         (kc/string-serde)
+         (kc/string-serde))
+        ;; (ks/count (kc/string-serde) (kc/long-serde))
+        (ks/ktable->kstream (fn [k v] (.key k)))
+        ;;(ks/peek #(println "merged-count:" %1 %2))
+        ;;(ks/map-values (fn [v] (double (apply / clojure.string/split))))
         (ks/peek #(println "saida:" %1 %2))
-        ;;(ks/filter (fn [k v] (> v 1.2)))
-        (ks/to "cxp" (ks/windowed-string-serde) (kc/double-serde)))
+        (ks/to "saida" (kc/string-serde) (kc/string-serde)))
 
-    (ks/make-kafka-streams builder ks-config)))
+    (ks/start-kafka-streams builder ks-config)))
 
 (comment
   (pprint (force (kc/send! producer "consultas"  "user-1" "-")))
@@ -66,4 +81,24 @@
 
   (.close kstreams)
   (.close consumer)
-  (.close producer))
+  (.close producer)
+
+  (reduce
+   (fn [acc v]
+     (let [splited (clojure.string/split acc #"," 2)
+           [c-count p-count] (mapv #(Integer/valueOf %) splited)]
+       (clojure.string/join
+        ","
+        (if (= v "c")
+          [(inc c-count) p-count]
+          [c-count (inc p-count)]))))
+   "0,0"
+   ["c" "c" "c" "v"])
+
+  (reduce #("a") (fn [a b] b) ["b" "c"])
+
+  (let [[c p] (mapv #(Integer/valueOf %) (clojure.string/split "0,0" #"," 2))]
+    (println (clojure.string/join "," [c p])))
+
+  
+  )
