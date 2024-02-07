@@ -16,9 +16,9 @@
    "key.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
    "value.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"})
 
-(def producer (kc/producer kc-config))
-(force (kc/send! producer "consultas"  "user-1" "-"))
-(force (kc/send! producer "pagamentos" "user-1" "100.00"))
+(def producer (kc/producer kc-config (ksd/string-serde) (ksd/edn-serde)))
+(force (kc/send! producer "consultas" "user-1" {:key "john.doe@email.com" :status 200}))
+(force (kc/send! producer "pagamentos" "user-1" {:value 100.00}))
 
 (def ks-config
   {"application.id" "scratch"
@@ -33,7 +33,7 @@
 (defn- make-ticks-stream
   [builder topic]
   (-> builder
-      (ks/make-kstream topic (ksd/string-serde) (ksd/string-serde))
+      (ks/make-kstream topic (ksd/string-serde) (ksd/edn-serde))
       (ks/peek #(println topic ":>" %1 %2))
       (ks/map-values (fn [v] (get topic 0)))))
 
@@ -46,22 +46,22 @@
         (ks/group-by-key)
         (ks/windowed-by 30 5)
         (ks/aggregate
-         (fn [] "1,1")
+         (fn [] {:query-count 0, :payment-count 0})
          (fn [k v acc]
-           (let [[c-count p-count] (str/split acc #"," 2)]
-             (if (= v \c)
-               (str (inc (Long/valueOf c-count)) \, p-count)
-               (str c-count \, (inc (Long/valueOf p-count))))))
+           (if (= v \c)
+             (update acc :query-count inc)
+             (update acc :payment-count inc)))
          (ksd/string-serde)
-         (ksd/string-serde))
-        (ks/ktable->kstream (fn [k v] (.key k)))
-        (ks/peek #(println "merged-count:" %1 %2))
+         (ksd/edn-serde))
+        (ks/ktable->kstream
+         ;; (fn [k v] (.key k))
+         )
+        (ks/peek #(println "counts:" %1 %2))
+        (ks/filter (fn [k v] (> (:query-count v) 0)))
         (ks/map-values
-         (fn [v]
-           (let [[c-count p-count] (str/split v #",")]
-             (double (/ (Long/valueOf c-count) (Long/valueOf p-count))))))
+         (fn [v] (double (/ (:payment-count v) (:query-count v)))))
         (ks/peek #(println "saida:" %1 %2))
-        (ks/to "saida" (ksd/string-serde) (ksd/double-serde)))
+        (ks/to "saida" (ks/windowed-string-serde) (ksd/double-serde)))
 
     (ks/start-kafka-streams builder ks-config)))
 

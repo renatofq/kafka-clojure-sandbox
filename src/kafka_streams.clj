@@ -84,8 +84,7 @@
                 (apply [this] (initializer)))
               (reify Aggregator
                 (apply [this k v a] (aggregator k v a)))
-              ;;(Materialized/as key-serde value-serde)
-              ))
+              (Materialized/with key-serde value-serde)))
 
 (defn join
   ([kjoinable-a kjoinable-b joiner]
