@@ -4,11 +4,9 @@
   (:require [clojure.pprint :refer [pprint]]
             [clojure.datafy :refer [datafy]])
   (:import java.time.Duration
-           [org.apache.kafka.clients.producer
-            KafkaProducer ProducerRecord]
+           [org.apache.kafka.clients.producer KafkaProducer ProducerRecord]
            org.apache.kafka.clients.consumer.KafkaConsumer
-           [org.apache.kafka.common.serialization
-            Serde Serdes]))
+           org.apache.kafka.common.serialization.Serde))
 
 (defn producer
   (^KafkaProducer [config]
@@ -40,18 +38,6 @@
 (defn poll
   [^KafkaConsumer consumer timeout-seconds]
   (map datafy (.poll consumer (Duration/ofSeconds timeout-seconds))))
-
-(defn string-serde
-  []
-  (Serdes/String))
-
-(defn double-serde
-  []
-  (Serdes/Double))
-
-(defn long-serde
-  []
-  (Serdes/Long))
 
 (comment
   (def config

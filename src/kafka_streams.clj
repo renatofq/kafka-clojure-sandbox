@@ -1,13 +1,12 @@
 (ns kafka-streams
   (:refer-clojure :exclude [filter count peek merge])
-  (:import java.time.Duration
-           [org.apache.kafka.streams
-            KafkaStreams StreamsBuilder Topology]
-           [org.apache.kafka.streams.kstream
-            KStream KTable Consumed Produced Materialized StreamJoined
-            Initializer Aggregator ValueMapper ValueJoiner KeyValueMapper
-            Predicate ForeachAction
-            JoinWindows SlidingWindows TimeWindows WindowedSerdes]))
+  (:import
+   (java.time Duration)
+   [org.apache.kafka.streams KafkaStreams StreamsBuilder Topology]
+   [org.apache.kafka.streams.kstream
+    Aggregator Consumed ForeachAction Initializer JoinWindows KeyValueMapper
+    KStream Materialized Predicate Produced SlidingWindows StreamJoined
+    ValueJoiner ValueMapper WindowedSerdes]))
 
 (defn- config->props
   [config]
