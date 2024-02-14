@@ -1,11 +1,11 @@
 (ns kafka-streams
   (:refer-clojure :exclude [filter count peek merge])
   (:import
-   (java.time Duration)
+   [java.time Duration]
    [org.apache.kafka.streams KafkaStreams StreamsBuilder Topology]
    [org.apache.kafka.streams.kstream
     Aggregator Consumed ForeachAction Initializer JoinWindows KeyValueMapper
-    KStream Materialized Predicate Produced SlidingWindows StreamJoined
+    KStream Materialized Predicate Produced TimeWindows StreamJoined
     ValueJoiner ValueMapper WindowedSerdes]))
 
 (defn- config->props
@@ -40,8 +40,8 @@
 (defn peek
   [ksource action]
   (.peek ksource
-            (reify ForeachAction
-              (apply [this k v] (action k v)))))
+         (reify ForeachAction
+           (apply [this k v] (action k v)))))
 
 (defn filter
   [ksource predicate]
@@ -64,12 +64,12 @@
   (.groupByKey kgroupable))
 
 (defn windowed-by
-  [kwindowable time-seconds grace-seconds]
-  (.windowedBy
-   kwindowable
-   (SlidingWindows/ofTimeDifferenceAndGrace
-    (Duration/ofSeconds time-seconds)
-    (Duration/ofSeconds grace-seconds))))
+  [kwindowable size-seconds advance-seconds]
+  (let [size-duration (Duration/ofSeconds size-seconds)
+        advance-duration (Duration/ofSeconds advance-seconds)
+        window (.advanceBy (TimeWindows/ofSizeWithNoGrace size-duration)
+                           advance-duration)]
+    (.windowedBy kwindowable window)))
 
 (defn count
   [kcountable key-serde value-serde]
