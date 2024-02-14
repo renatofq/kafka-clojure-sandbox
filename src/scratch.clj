@@ -17,8 +17,10 @@
    "value.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"})
 
 (def producer (kc/producer kc-config (ksd/string-serde) (ksd/edn-serde)))
-(force (kc/send! producer "consultas" "user-1" {:key "john.doe@email.com" :status 200}))
-(force (kc/send! producer "pagamentos" "user-1" {:value 100.00}))
+(force (kc/send! producer "fetchs" "user-1"
+                 {:key "jon.doe@email.com" :status 200}))
+(force (kc/send! producer "pushs"  "user-1"
+                 {:key "jon.doe@email.com" :value 100.00}))
 
 (def ks-config
   {"application.id" "scratch"
@@ -39,38 +41,38 @@
 
 (def kstreams
   (let [builder (ks/make-streams-builder)
-        consulta-ticks (make-ticks-stream builder "consultas")
-        pagamento-ticks (make-ticks-stream builder "pagamentos")]
+        fetch-ticks (make-ticks-stream builder "fetchs")
+        push-ticks (make-ticks-stream builder "pushs")]
 
-    (-> (ks/merge consulta-ticks pagamento-ticks)
+    (-> (ks/merge fetch-ticks push-ticks)
         (ks/group-by-key)
         (ks/windowed-by 30 5)
         (ks/aggregate
-         (fn [] {:query-count 0, :payment-count 0})
+         (fn [] {:fetch-count 0, :push-count 0})
          (fn [k v acc]
-           (if (= v \c)
-             (update acc :query-count inc)
-             (update acc :payment-count inc)))
+           (if (= v \f)
+             (update acc :fetch-count inc)
+             (update acc :push-count inc)))
          (ksd/string-serde)
          (ksd/edn-serde))
-        (ks/ktable->kstream
-         ;; (fn [k v] (.key k))
-         )
+        (ks/ktable->kstream)
         (ks/peek #(println "counts:" %1 %2))
-        (ks/filter (fn [k v] (> (:query-count v) 0)))
+        (ks/filter (fn [k v] (> (:fetch-count v) 0)))
         (ks/map-values
-         (fn [v] (double (/ (:payment-count v) (:query-count v)))))
-        (ks/peek #(println "saida:" %1 %2))
-        (ks/to "saida" (ks/windowed-string-serde) (ksd/double-serde)))
+         (fn [v] (double (/ (:push-count v) (:fetch-count v)))))
+        (ks/peek #(println "ratio:" %1 %2))
+        (ks/to "ratio" (ks/windowed-string-serde) (ksd/double-serde)))
 
     (ks/start-kafka-streams builder ks-config)))
 
 (comment
   (def consumer (kc/consumer kc-config))
-  (kc/subscribe consumer ["saida"])
+  (kc/subscribe consumer ["ration"])
 
-  (pprint (force (kc/send! producer "consultas"  "user-1" "-")))
-  (pprint (force (kc/send! producer "pagamentos" "user-1" "100.00")))
+  (pprint (force (kc/send! producer "fetchs"  "user-1"
+                           {:key "jon.doe@email.com" :status 200})))
+  (pprint (force (kc/send! producer "pushs" "user-1"
+                           {:key "jon.doe@email.com" :value 100.00})))
 
   (pprint (kc/poll consumer 1))
 
