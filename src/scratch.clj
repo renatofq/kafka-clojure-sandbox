@@ -1,7 +1,6 @@
 (ns scratch
   (:require
    [clojure.pprint :refer [pprint]]
-   [clojure.string :as str]
    [kafka-client :as kc]
    [kafka-streams :as ks]
    [kafka-serdes :as ksd]))
@@ -17,9 +16,9 @@
    "value.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"})
 
 (def producer (kc/producer kc-config (ksd/string-serde) (ksd/edn-serde)))
-(force (kc/send! producer "fetchs" "user-1"
+(force (kc/send! producer "fetches" "user-1"
                  {:key "jon.doe@email.com" :status 200}))
-(force (kc/send! producer "pushs"  "user-1"
+(force (kc/send! producer "pushes"  "user-1"
                  {:key "jon.doe@email.com" :value 100.00}))
 
 (def ks-config
@@ -41,37 +40,37 @@
 
 (def kstreams
   (let [builder (ks/make-streams-builder)
-        fetch-ticks (make-ticks-stream builder "fetchs")
-        push-ticks (make-ticks-stream builder "pushs")]
+        fetch-ticks (make-ticks-stream builder "fetches")
+        push-ticks (make-ticks-stream builder "pushes")]
 
     (-> (ks/merge fetch-ticks push-ticks)
         (ks/group-by-key)
         (ks/windowed-by 30 5)
         (ks/aggregate
-         (fn [] {:fetch-count 0, :push-count 0})
+         (fn [] {:fetches-count 0, :pushes-count 0})
          (fn [k v acc]
            (if (= v \f)
-             (update acc :fetch-count inc)
-             (update acc :push-count inc)))
+             (update acc :fetches-count inc)
+             (update acc :pushes-count inc)))
          (ksd/string-serde)
          (ksd/edn-serde))
         (ks/ktable->kstream)
         (ks/peek #(println "counts:" %1 %2))
-        (ks/filter (fn [k v] (> (:fetch-count v) 0)))
+        (ks/filter (fn [k v] (> (:fetches-count v) 0)))
         (ks/map-values
-         (fn [v] (double (/ (:push-count v) (:fetch-count v)))))
+         (fn [v] (double (/ (:pushes-count v) (:fetches-count v)))))
         (ks/peek #(println "ratio:" %1 %2))
-        (ks/to "ratio" (ks/windowed-string-serde) (ksd/double-serde)))
+        (ks/to "ratios" (ks/windowed-string-serde) (ksd/double-serde)))
 
     (ks/start-kafka-streams builder ks-config)))
 
 (comment
   (def consumer (kc/consumer kc-config))
-  (kc/subscribe consumer ["ration"])
+  (kc/subscribe consumer ["ratios"])
 
-  (pprint (force (kc/send! producer "fetchs"  "user-1"
+  (pprint (force (kc/send! producer "fetches"  "user-1"
                            {:key "jon.doe@email.com" :status 200})))
-  (pprint (force (kc/send! producer "pushs" "user-1"
+  (pprint (force (kc/send! producer "pushes" "user-1"
                            {:key "jon.doe@email.com" :value 100.00})))
 
   (pprint (kc/poll consumer 1))
