@@ -2,10 +2,10 @@
   (:refer-clojure :exclude [filter count peek merge])
   (:import
    [java.time Duration]
-   [org.apache.kafka.streams KafkaStreams StreamsBuilder Topology]
+   [org.apache.kafka.streams KafkaStreams StreamsBuilder]
    [org.apache.kafka.streams.kstream
     Aggregator Consumed ForeachAction Initializer JoinWindows KeyValueMapper
-    KStream Materialized Predicate Produced TimeWindows StreamJoined
+    Materialized Predicate Produced TimeWindows StreamJoined
     ValueJoiner ValueMapper WindowedSerdes]))
 
 (defn- config->props
@@ -14,26 +14,36 @@
     (.putAll config)))
 
 (defn make-streams-builder
+  "Returns a new StreamsBuilder"
+  ^StreamsBuilder
   []
   (StreamsBuilder.))
 
 (defn make-kstream
-  ^KStream [builder topic key-serde value-serde]
+  "Returns a KStream given a builder a topic and the key and value serde"
+  [^StreamsBuilder builder topic key-serde value-serde]
   (.stream builder topic (Consumed/with key-serde value-serde)))
 
+(defn make-ktable
+  "Returns a KStream given a builder a topic and the key and value serde"
+  [^StreamsBuilder builder topic key-serde value-serde]
+  (.table builder topic (Consumed/with key-serde value-serde) (Materialized/with key-serde value-serde)))
+
 (defn start-kafka-streams
-  ^KafkaStreams [builder config]
-  (let [topology (.build builder)
-        kafka-streams (KafkaStreams. ^Topology topology (config->props config))]
+  "Creates and starts a KafkaStreams instance given a builder a the configuration"
+  [^StreamsBuilder builder config]
+  (let [topology (.build  builder)
+        kafka-streams (KafkaStreams. topology (config->props config))]
     (.start kafka-streams)
     (println (.toString (.describe topology)))
     kafka-streams))
 
 (defn stop-kafka-streams
-  [kafka-streams]
+  [^KafkaStreams kafka-streams]
   (.close kafka-streams))
 
 (defn to
+  "Terminal operation that materializes a KStream or KTable to a topic"
   [ksource topic key-serde value-serde]
   (.to ksource topic (Produced/with key-serde value-serde)))
 
@@ -41,19 +51,19 @@
   [ksource action]
   (.peek ksource
          (reify ForeachAction
-           (apply [this k v] (action k v)))))
+           (apply [_ k v] (action k v)))))
 
 (defn filter
   [ksource predicate]
   (.filter ksource
            (reify Predicate
-             (test [this k v] (predicate k v)))))
+             (test [_ k v] (predicate k v)))))
 
 (defn map-values
   [ksource value-mapper]
   (.mapValues ksource
               (reify ValueMapper
-                (apply [this v] (value-mapper v)))))
+                (apply [_ v] (value-mapper v)))))
 
 (defn merge
   [ksource-a ksource-b]
@@ -81,9 +91,9 @@
   [ksource initializer aggregator key-serde value-serde]
   (.aggregate ksource
               (reify Initializer
-                (apply [this] (initializer)))
+                (apply [_] (initializer)))
               (reify Aggregator
-                (apply [this k v a] (aggregator k v a)))
+                (apply [_ k v a] (aggregator k v a)))
               (Materialized/with key-serde value-serde)))
 
 (defn join
@@ -91,14 +101,14 @@
    (.join kjoinable-a
           kjoinable-b
           (reify ValueJoiner
-            (apply [this a b] (joiner a b)))))
+            (apply [_ a b] (joiner a b)))))
   ([kjoinable-a kjoinable-b joiner
     time-seconds grace-seconds
     key-serde value-serde other-value-serde]
    (.join kjoinable-a
           kjoinable-b
           (reify ValueJoiner
-            (apply [this a b] (joiner a b)))
+            (apply [_ a b] (joiner a b)))
           (JoinWindows/ofTimeDifferenceAndGrace
            (Duration/ofSeconds time-seconds)
            (Duration/ofSeconds grace-seconds))
@@ -109,7 +119,7 @@
    (.toStream ktable))
   ([ktable key-mapper]
    (.toStream ktable (reify KeyValueMapper
-                       (apply [this k v] (key-mapper k v))))))
+                       (apply [_ k v] (key-mapper k v))))))
 
 (defn windowed-string-serde
   []

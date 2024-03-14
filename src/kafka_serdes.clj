@@ -4,19 +4,19 @@
 
 (defn- edn-serializer []
   (reify Serializer
-    (serialize [this topic data]
+    (serialize [_ _ data]
       (nippy/freeze data))))
 
 (defn- edn-deserializer []
   (reify Deserializer
-    (deserialize [this topic data]
+    (deserialize [_ _ data]
       (nippy/thaw data))))
 
 (defn edn-serde []
   (reify Serde
-    (serializer [this]
+    (serializer [_]
       (edn-serializer))
-    (deserializer [this]
+    (deserializer [_]
       (edn-deserializer))))
 
 (defn string-serde []

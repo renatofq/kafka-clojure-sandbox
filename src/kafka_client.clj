@@ -9,6 +9,7 @@
            org.apache.kafka.common.serialization.Serde))
 
 (defn producer
+  "Returns a KafkaProducer given a config"
   (^KafkaProducer [config]
    (KafkaProducer. ^java.util.Map config))
   (^KafkaProducer [config key-serde value-serde]
@@ -17,6 +18,7 @@
                    (.serializer ^Serde value-serde))))
 
 (defn send!
+  "sends message with message-key to topic"
   [producer topic message-key message]
   (let [record (ProducerRecord. topic message-key message)
         future (.send ^KafkaProducer producer ^ProducerRecord record)]
